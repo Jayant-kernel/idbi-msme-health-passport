@@ -162,6 +162,37 @@ function scoreApplicant(persona, enabled, overrides) {
   scores.repayment -= overrides.existingEmi / 16000;
   scores.risk -= overrides.existingEmi / 22000;
 
+  const inferredSurplus = overrides.monthlyRevenue * 0.18 - overrides.existingEmi;
+  const debtBurden = overrides.existingEmi / Math.max(1, overrides.monthlyRevenue);
+  const lowSourceCoverage = activeCount <= 2;
+
+  if (debtBurden > 0.32) {
+    scores.repayment -= 18;
+    scores.risk -= 10;
+  }
+
+  if (inferredSurplus < 0) {
+    scores.repayment -= 22;
+    scores.cashFlow -= 9;
+    scores.risk -= 12;
+  }
+
+  if (!enabled.aa && !enabled.receivables) {
+    scores.cashFlow -= 5;
+    scores.receivables -= 8;
+    scores.risk -= 4;
+  }
+
+  if (!enabled.gst) {
+    scores.revenue -= 6;
+    scores.compliance -= 6;
+  }
+
+  if (lowSourceCoverage) {
+    scores.repayment -= 6;
+    scores.risk -= 5;
+  }
+
   Object.keys(scores).forEach((key) => {
     scores[key] = clamp(scores[key]);
   });
@@ -189,12 +220,21 @@ function scoreApplicant(persona, enabled, overrides) {
   const upper = dataAvailable ? monthlySurplus * 20 * scoreFactor * confidenceFactor : 0;
   const suggestedUpper = Math.min(persona.requested, Math.max(150000, upper));
   const suggestedLower = Math.min(suggestedUpper, Math.max(100000, lower));
+  const notViable =
+    dataAvailable &&
+    activeCount >= 2 &&
+    (composite < 58 ||
+      scores.repayment < 45 ||
+      (inferredSurplus < 0 && confidence < 70) ||
+      (lowSourceCoverage && debtBurden > 0.28));
 
   return {
     activeCount,
     confidence,
     composite,
     scores,
+    notViable,
+    inferredSurplus,
     suggestedLower,
     suggestedUpper,
     emi: suggestedUpper / 24,
@@ -235,6 +275,9 @@ function Explanation({ persona, enabled, result }) {
     if (result.scores.repayment < 65) {
       lines.push("Repayment capacity needs review because current obligations reduce estimated monthly surplus.");
     }
+    if (result.notViable) {
+      lines.unshift("Not viable at current terms: verified inflows do not support the requested debt load, and missing AA/receivable evidence prevents a safe collateral-free limit.");
+    }
   }
 
   return (
@@ -256,7 +299,10 @@ function Explanation({ persona, enabled, result }) {
 function Stamp({ result }) {
   let label = "INSUFFICIENT DATA";
   let tone = "low";
-  if (result.composite !== null && result.confidence >= 70 && result.composite >= 72) {
+  if (result.notViable) {
+    label = "NOT VIABLE";
+    tone = "danger";
+  } else if (result.composite !== null && result.confidence >= 70 && result.composite >= 72) {
     label = "VIABLE";
     tone = "high";
   } else if (result.composite !== null && result.composite >= 58) {
@@ -284,6 +330,26 @@ function App() {
 
   function changePersona(id) {
     setPersonaId(id);
+  }
+
+  function applyStressCase() {
+    setPersonaId("kirana");
+    setEnabled({
+      gst: false,
+      upi: true,
+      epfo: true,
+      aa: false,
+      receivables: false,
+    });
+    setInputs({
+      monthlyRevenue: 175000,
+      monthlyUpi: 90000,
+      gstDelayDays: 10,
+      employees: 3,
+      pendingReceivables: 75000,
+      buyerQuality: 42,
+      existingEmi: 90000,
+    });
   }
 
   const result = useMemo(() => scoreApplicant(persona, enabled, inputs), [persona, enabled, inputs]);
@@ -371,10 +437,16 @@ function App() {
               <ShieldCheck size={18} />
               <h2>Health ledger</h2>
             </div>
-            <button className="reset" onClick={resetInputs}>
-              <RotateCcw size={15} />
-              Reset entries
-            </button>
+            <div className="ledger-actions">
+              <button className="reset" onClick={applyStressCase}>
+                <ShieldCheck size={15} />
+                Stress case
+              </button>
+              <button className="reset" onClick={resetInputs}>
+                <RotateCcw size={15} />
+                Reset entries
+              </button>
+            </div>
           </div>
 
           <div className="score-strip">
@@ -433,11 +505,15 @@ function App() {
             <strong>
               {result.activeCount === 0
                 ? "Hold for data"
+                : result.notViable
+                  ? "No safe limit"
                 : `${formatINR(result.suggestedLower)} - ${formatINR(result.suggestedUpper)}`}
             </strong>
             <p>
               {result.activeCount === 0
                 ? "The passport waits for at least one consented source before proposing a limit."
+                : result.notViable
+                  ? "Current cash-flow evidence does not support a collateral-free loan. Reassess after AA or verified receivables improve coverage."
                 : `Indicative term: 24 months, estimated EMI near ${formatINR(result.emi)}.`}
             </p>
           </div>
