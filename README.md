@@ -2,7 +2,7 @@
 
 An interactive prototype for **IDBI Innovate 2026 - Track 03: Financial Health Score**.
 
-Live prototype: https://msme-health-passport.ajsaxena2377.chatgpt.site/index.html  
+Live prototype: (https://idbi-msme-health-passport.vercel.app/) 
 Repository: https://github.com/Jayant-kernel/idbi-msme-health-passport
 
 ## One-Line Pitch
