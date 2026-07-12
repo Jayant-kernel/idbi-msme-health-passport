@@ -46,6 +46,7 @@ const PERSONAS = {
       aa: { cashFlow: 7, repayment: 7, risk: 3 },
       receivables: { receivables: 8 },
     },
+    sourceMonths: { gst: 22, upi: 30, epfo: 18, aa: 24, receivables: 12 },
     inputs: {
       monthlyRevenue: 675000,
       monthlyUpi: 530000,
@@ -79,6 +80,7 @@ const PERSONAS = {
       aa: { cashFlow: 5, repayment: 5 },
       receivables: { receivables: 11, cashFlow: 5, risk: 4 },
     },
+    sourceMonths: { gst: 16, upi: 12, epfo: 20, aa: 15, receivables: 18 },
     inputs: {
       monthlyRevenue: 1175000,
       monthlyUpi: 210000,
@@ -112,6 +114,7 @@ const PERSONAS = {
       aa: { cashFlow: 6, repayment: 6, risk: 2 },
       receivables: { receivables: 5 },
     },
+    sourceMonths: { gst: 8, upi: 14, epfo: 6, aa: 11, receivables: 4 },
     inputs: {
       monthlyRevenue: 325000,
       monthlyUpi: 290000,
@@ -199,7 +202,7 @@ function scoreApplicant(persona, enabled, overrides) {
 
   const confidence = clamp(20 + activeCount * 14 + SOURCES.reduce((sum, source) => {
     return sum + (enabled[source.id] ? source.weight * 3 : 0);
-  }, 0));
+  }, 0), 0, 94);
 
   const dataAvailable = activeCount > 0;
   const composite = dataAvailable
@@ -419,6 +422,7 @@ function App() {
                   <span>
                     <Icon size={16} />
                     {source.label}
+                    <em className="mono source-months"> · {persona.sourceMonths[source.id]} mo</em>
                   </span>
                   <input
                     type="checkbox"
@@ -452,7 +456,7 @@ function App() {
           <div className="score-strip">
             <div>
               <span>Composite score</span>
-              <strong>{result.composite === null ? "--" : result.composite}</strong>
+              <strong>{result.composite === null ? "--" : `${result.composite}/100`}</strong>
             </div>
             <div>
               <span>Confidence</span>
@@ -488,7 +492,7 @@ function App() {
             <Slider label="Monthly revenue" value={inputs.monthlyRevenue} min={150000} max={1400000} step={25000} onChange={(monthlyRevenue) => setInputs({ ...inputs, monthlyRevenue })} money />
             <Slider label="Monthly UPI receipts" value={inputs.monthlyUpi} min={50000} max={900000} step={10000} onChange={(monthlyUpi) => setInputs({ ...inputs, monthlyUpi })} money />
             <Slider label="GST delay days" value={inputs.gstDelayDays} min={0} max={10} step={1} onChange={(gstDelayDays) => setInputs({ ...inputs, gstDelayDays })} />
-            <Slider label="Pending receivables" value={inputs.pendingReceivables} min={0} max={1100000} step={25000} onChange={(pendingReceivables) => setInputs({ ...inputs, pendingReceivables })} money />
+            <Slider label="Verified receivables (invoice book)" value={inputs.pendingReceivables} min={0} max={1100000} step={25000} onChange={(pendingReceivables) => setInputs({ ...inputs, pendingReceivables })} money />
             <Slider label="Buyer quality" value={inputs.buyerQuality} min={20} max={95} step={1} onChange={(buyerQuality) => setInputs({ ...inputs, buyerQuality })} />
             <Slider label="Existing EMI" value={inputs.existingEmi} min={0} max={90000} step={2500} onChange={(existingEmi) => setInputs({ ...inputs, existingEmi })} money />
           </div>
@@ -536,9 +540,12 @@ function App() {
               <BadgeCheck size={16} />
               <h3>Next entries</h3>
             </div>
-            <p>30 days: reconnect missing consent sources.</p>
-            <p>60 days: reduce GST filing delays below 2 days.</p>
-            <p>90 days: route verified receivables through discountable invoice rails.</p>
+            {result.activeCount < 5 && <p>30 days: reconnect missing consent sources.</p>}
+            {inputs.gstDelayDays > 2 && <p>60 days: reduce GST filing delays below 2 days.</p>}
+            {result.scores.receivables < 65 && <p>90 days: route verified receivables through discountable invoice rails.</p>}
+            {result.activeCount === 5 && inputs.gstDelayDays <= 2 && result.scores.receivables >= 65 && (
+              <p>Profile is well-evidenced. Maintain filing discipline for limit enhancement review at 90 days.</p>
+            )}
           </div>
         </aside>
       </section>

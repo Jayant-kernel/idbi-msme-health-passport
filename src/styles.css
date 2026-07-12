@@ -228,6 +228,11 @@ dd {
   accent-color: var(--stamp);
 }
 
+.source-months {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
 .ledger-head {
   display: flex;
   align-items: center;
